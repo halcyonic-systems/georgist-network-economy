@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Georgist Land Value Simulation</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ============================================================
+   DESIGN SYSTEM
+   ============================================================ */
+:root {
+  --bg: #f8f9fa;
+  --bg-card: #ffffff;
+  --bg-section: #f0f2f5;
+  --border: #e5e7eb;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --text-dim: #9ca3af;
+  --accent: #1a56db;
+  --accent-soft: #eff6ff;
+  --success: #059669;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.06);
+  --radius: 8px;
+
+  /* Land value heat colours (low → high) */
+  --heat-0: #f0f4ff;
+  --heat-low: #93c5fd;
+  --heat-mid: #3b82f6;
+  --heat-high: #1d4ed8;
+  --heat-max: #1e1b4b;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, 'Inter', 'Helvetica Neue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  min-width: 1100px;
+}
+
+/* ============================================================ TOPBAR */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 24px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow);
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.topbar-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid #bfdbfe;
+}
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+
+/* KPI pills in topbar */
+.kpi-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--bg-section);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: 12px;
+}
+.kpi-pill .kpi-label { color: var(--text-muted); }
+.kpi-pill .kpi-val { font-weight: 700; font-family: 'SF Mono', 'Menlo', monospace; }
+.kpi-pill.kpi-round .kpi-val { color: var(--accent); }
+.kpi-pill.kpi-gini .kpi-val { color: var(--warning); }
+.kpi-pill.kpi-housing .kpi-val { color: var(--success); }
+
+/* ============================================================ LAYOUT */
+.layout {
+  display: grid;
+  grid-template-columns: 260px 1fr 200px;
+  grid-template-rows: 1fr auto;
+  height: calc(100vh - 49px);
+  gap: 0;
+}
+
+/* ============================================================ SIDEBAR */
+.sidebar {
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+.sidebar-heading {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Sliders */
+.param-row { display: flex; flex-direction: column; gap: 3px; }
+.param-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.param-label span:last-child {
+  font-weight: 700;
+  color: var(--text);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+input[type=range] {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 0;
+}
+.toggle {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  cursor: pointer;
+}
+.toggle input { display: none; }
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 99px;
+  transition: background 0.2s;
+}
+.toggle input:checked ~ .toggle-track { background: var(--accent); }
+.toggle-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle input:checked ~ .toggle-thumb { transform: translateX(14px); }
+
+/* Seed input */
+.seed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.seed-row input[type=number] {
+  width: 80px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'SF Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+}
+.seed-label { font-size: 12px; color: var(--text-muted); flex: 1; }
+
+/* Buttons */
+.btn-row { display: flex; gap: 6px; }
+.btn {
+  flex: 1;
+  padding: 7px 12px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: white; }
+.btn-secondary { background: var(--bg-section); color: var(--text); border: 1px solid var(--border); }
+.btn-danger { background: #fee2e2; color: var(--danger); border: 1px solid #fca5a5; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+/* Scenario chips */
+.scenario-chips { display: flex; flex-direction: column; gap: 5px; }
+.scenario-chip {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: var(--bg);
+  transition: all 0.15s;
+  text-align: left;
+}
+.scenario-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.scenario-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.scenario-chip-name { font-weight: 600; font-size: 12px; color: var(--text); }
+.scenario-chip-desc { font-size: 11px; color: var(--text-muted); margin-top: 1px; line-height: 1.4; }
+
+/* ============================================================ MAIN */
+.main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  padding: 0 20px;
+}
+.tab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+
+.tab-content { display: none; flex: 1; overflow: auto; padding: 20px; }
+.tab-content.active { display: flex; flex-direction: column; gap: 16px; }
+
+/* ============================================================ GRID */
+.grid-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.grid-header {
+  display: flex;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-dim);
+  padding-left: 28px;
+}
+.grid-header span { width: 46px; text-align: center; }
+.grid-row { display: flex; align-items: center; gap: 4px; }
+.grid-row-label {
+  width: 24px;
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: right;
+}
+.grid-canvas {
+  display: grid;
+  grid-template-columns: repeat(10, 46px);
+  grid-template-rows: repeat(10, 46px);
+  gap: 4px;
+}
+.parcel {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  border: 1px solid rgba(0,0,0,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.parcel:hover { transform: scale(1.08); z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.parcel.selected { box-shadow: 0 0 0 2px white, 0 0 0 4px var(--accent); z-index: 10; }
+.parcel-value {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  position: absolute;
+  bottom: 3px;
+  right: 4px;
+  line-height: 1;
+}
+.agent-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.8);
+  flex-shrink: 0;
+}
+.vacant-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+}
+
+/* Legend */
+.grid-legend {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.legend-gradient {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-bar {
+  width: 80px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #f0f4ff, #3b82f6, #1e1b4b);
+}
+.legend-dot-row { display: flex; align-items: center; gap: 6px; }
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+/* ============================================================ CHARTS TAB */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.chart-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+}
+.chart-card h3 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+.chart-card canvas { max-height: 200px; }
+.chart-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  font-style: italic;
+}
+
+/* Mesa advantages card */
+.mesa-card {
+  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.mesa-card h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.mesa-card ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mesa-card ul li {
+  font-size: 12px;
+  color: #1e40af;
+  display: flex;
+  gap: 8px;
+}
+.mesa-card ul li::before { content: "✦"; flex-shrink: 0; }
+
+/* ============================================================ RIGHT PANEL */
+.right-panel {
+  background: var(--bg-card);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.panel-section { display: flex; flex-direction: column; gap: 6px; }
+.panel-heading {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Stats grid */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.stat-item {
+  background: var(--bg-section);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.stat-label { font-size: 10px; color: var(--text-muted); }
+.stat-val { font-size: 14px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--text); }
+
+/* Unhoused list */
+.unhoused-list { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; }
+.unhoused-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px;
+  background: var(--bg-section);
+  border-radius: 5px;
+  font-size: 11px;
+}
+.unhoused-item .u-wealth {
+  font-weight: 700;
+  font-family: 'SF Mono', monospace;
+  color: var(--danger);
+}
+.unhoused-empty {
+  text-align: center;
+  padding: 16px 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* Parcel detail */
+.parcel-detail {
+  background: var(--bg-section);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 12px;
+}
+.parcel-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  color: var(--text-muted);
+}
+.parcel-detail-row span:last-child {
+  font-weight: 600;
+  color: var(--text);
+  font-family: 'SF Mono', monospace;
+}
+.parcel-event-list { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+.parcel-event {
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--bg-card);
+  border-left: 2px solid var(--border);
+  color: var(--text-muted);
+}
+.parcel-event.ev-auction_won { border-color: var(--success); }
+.parcel-event.ev-lease_expired { border-color: var(--warning); }
+.parcel-event.ev-priced_out { border-color: var(--danger); }
+
+/* ============================================================ GUIDE TAB */
+.guide-content { max-width: 680px; display: flex; flex-direction: column; gap: 20px; }
+.guide-section h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+.guide-section p { font-size: 13px; color: var(--text-muted); line-height: 1.7; margin-bottom: 8px; }
+.guide-section ul { list-style: disc; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.guide-section ul li { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.auction-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.auction-table th {
+  background: var(--bg-section);
+  padding: 7px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.auction-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+.auction-table tr:last-child td { border-bottom: none; }
+
+.mesa-advantage-card {
+  background: linear-gradient(135deg, #eff6ff, #f0fdf4);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius);
+  padding: 16px 20px;
+}
+.mesa-advantage-card h3 { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+.mesa-advantage-card p { font-size: 13px; color: #1e40af; line-height: 1.6; }
+.mesa-advantage-card ul {
+  list-style: none;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.mesa-advantage-card ul li {
+  font-size: 13px;
+  color: #1e40af;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.mesa-advantage-card ul li::before { content: "✦"; flex-shrink: 0; margin-top: 1px; }
+
+/* ============================================================ SCENARIOS TAB */
+.scenarios-tab { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.scenario-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: var(--shadow-card);
+}
+.scenario-card:hover { border-color: var(--accent); box-shadow: 0 4px 12px rgba(26,86,219,0.1); }
+.scenario-card.active { border-color: var(--accent); background: var(--accent-soft); }
+.scenario-card-name { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.scenario-card-desc { font-size: 12px; color: var(--text-muted); line-height: 1.6; margin-bottom: 10px; }
+.scenario-params { display: flex; flex-wrap: wrap; gap: 6px; }
+.scenario-param-tag {
+  font-size: 11px;
+  padding: 2px 7px;
+  background: var(--bg-section);
+  border-radius: 99px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.scenario-load-btn {
+  margin-top: 10px;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ============================================================ MISC */
+.export-row { display: flex; gap: 8px; align-items: center; }
+.export-label { font-size: 12px; color: var(--text-muted); }
+
+.status-bar {
+  padding: 6px 16px;
+  background: var(--bg-section);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  display: inline-block;
+}
+.status-dot.running { background: var(--success); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ TOPBAR -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-title">Georgist Land Value Simulation</span>
+    <span class="topbar-badge">Python / Mesa</span>
+  </div>
+  <div class="topbar-right">
+    <div class="kpi-pill kpi-round">
+      <span class="kpi-label">Round</span>
+      <span class="kpi-val" id="kpi-round">0</span>
+    </div>
+    <div class="kpi-pill kpi-housing">
+      <span class="kpi-label">Housed</span>
+      <span class="kpi-val" id="kpi-housing">0%</span>
+    </div>
+    <div class="kpi-pill kpi-gini">
+      <span class="kpi-label">Gini</span>
+      <span class="kpi-val" id="kpi-gini">—</span>
+    </div>
+    <div class="kpi-pill">
+      <span class="kpi-label">Unhoused</span>
+      <span class="kpi-val" id="kpi-unhoused">0</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================ LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <!-- Run controls -->
+    <div class="sidebar-section">
+      <div class="sidebar-heading">Controls</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-run" onclick="toggleRun()">▶ Run</button>
+        <button class="btn btn-secondary" onclick="stepOnce()">Step</button>
+        <button class="btn btn-danger" onclick="resetSim()">Reset</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+        <span style="font-size:12px;color:var(--text-muted);">Speed (ms/step)</span>
+        <input type="range" id="speed-slider" min="50" max="2000" value="400" style="flex:1;" oninput="updateSpeed(this.value)">
+        <span style="font-size:11px;font-family:monospace;color:var(--text);width:40px;" id="speed-label">400</span>
+      </div>
+    </div>
+
+    <!-- Parameters -->
+    <div class="sidebar-section">
+      <div class="sidebar-heading">Parameters</div>
+
+      <div class="param-row">
+        <div class="param-label"><span>Immigration rate</span><span id="lbl-imm">10</span></div>
+        <input type="range" id="s-imm" min="1" max="20" value="10" oninput="syncLabel('s-imm','lbl-imm',v=>v)">
+      </div>
+      <div class="param-row">
+        <div class="param-label"><span>Min lease length</span><span id="lbl-min-lease">5</span></div>
+        <input type="range" id="s-min-lease" min="1" max="20" value="5" oninput="syncLabel('s-min-lease','lbl-min-lease',v=>v)">
+      </div>
+      <div class="param-row">
+        <div class="param-label"><span>Max lease length</span><span id="lbl-max-lease">15</span></div>
+        <input type="range" id="s-max-lease" min="1" max="50" value="15" oninput="syncLabel('s-max-lease','lbl-max-lease',v=>v)">
+      </div>
+      <div class="param-row">
+        <div class="param-label"><span>Max wealth</span><span id="lbl-max-wealth">26</span></div>
+        <input type="range" id="s-max-wealth" min="5" max="60" value="26" oninput="syncLabel('s-max-wealth','lbl-max-wealth',v=>v)">
+      </div>
+      <div class="param-row">
+        <div class="param-label"><span>Env. weight</span><span id="lbl-env-w">1.0</span></div>
+        <input type="range" id="s-env-w" min="0.1" max="3" step="0.1" value="1.0" oninput="syncLabel('s-env-w','lbl-env-w',v=>parseFloat(v).toFixed(1))">
+      </div>
+      <div class="param-row">
+        <div class="param-label"><span>Community weight</span><span id="lbl-comm-w">1.0</span></div>
+        <input type="range" id="s-comm-w" min="0.1" max="3" step="0.1" value="1.0" oninput="syncLabel('s-comm-w','lbl-comm-w',v=>parseFloat(v).toFixed(1))">
+      </div>
+      <div class="toggle-row">
+        <span>Vacancy decay</span>
+        <label class="toggle">
+          <input type="checkbox" id="s-vacancy" checked>
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+
+      <!-- Seed (Mesa advantage) -->
+      <div class="toggle-row" style="margin-top:4px;">
+        <span class="seed-label">Seed (reproducible run)</span>
+      </div>
+      <div class="seed-row">
+        <input type="number" id="s-seed" placeholder="random" min="0" max="999999">
+        <button class="btn btn-secondary" style="flex:0;padding:4px 10px;font-size:11px;" onclick="applySeedAndReset()">Apply</button>
+      </div>
+
+      <button class="btn btn-primary" style="margin-top:6px;" onclick="applyParams()">Apply &amp; Restart</button>
+    </div>
+
+    <!-- Scenarios -->
+    <div class="sidebar-section">
+      <div class="sidebar-heading">Scenarios</div>
+      <div class="scenario-chips" id="scenario-chips">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <!-- Export (Mesa advantage) -->
+    <div class="sidebar-section">
+      <div class="sidebar-heading">Export (Mesa Advantage)</div>
+      <button class="btn btn-secondary" onclick="exportCSV()">⬇ Download Time-Series CSV</button>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">Full run — every metric every round</div>
+    </div>
+
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('simulation', this)">Simulation</div>
+      <div class="tab" onclick="switchTab('charts', this)">Charts</div>
+      <div class="tab" onclick="switchTab('guide', this)">Guide</div>
+      <div class="tab" onclick="switchTab('scenarios', this)">Scenarios</div>
+    </div>
+
+    <!-- SIMULATION TAB -->
+    <div class="tab-content active" id="tab-simulation">
+      <div class="grid-container">
+        <!-- Column labels -->
+        <div style="display:flex;align-items:center;gap:4px;padding-left:28px;">
+          <div class="grid-header">
+            <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+            <span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+          </div>
+        </div>
+        <!-- Grid rows with row labels -->
+        <div style="display:flex;gap:4px;">
+          <div style="display:flex;flex-direction:column;justify-content:space-around;gap:4px;width:24px;">
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">A</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">B</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">C</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">D</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">E</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">F</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">G</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">H</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">I</span>
+            <span style="height:46px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--text-dim);">J</span>
+          </div>
+          <div class="grid-canvas" id="grid-canvas">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+        <div class="grid-legend">
+          <div class="legend-gradient">
+            <span>Low value</span>
+            <div class="legend-bar"></div>
+            <span>High value</span>
+          </div>
+          <div class="legend-dot-row">
+            <div class="legend-dot" style="background:hsl(0,70%,60%);"></div><span>Low wealth</span>
+          </div>
+          <div class="legend-dot-row">
+            <div class="legend-dot" style="background:hsl(120,60%,45%);"></div><span>High wealth</span>
+          </div>
+          <div class="legend-dot-row">
+            <div class="vacant-dot" style="width:8px;height:8px;background:#9ca3af;border-radius:50%;"></div><span>Vacant</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHARTS TAB -->
+    <div class="tab-content" id="tab-charts">
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Housing Rate</h3>
+          <canvas id="chart-housing"></canvas>
+          <p class="chart-note">Fraction of 100 parcels with active occupants.</p>
+        </div>
+        <div class="chart-card">
+          <h3>Gini Coefficient</h3>
+          <canvas id="chart-gini"></canvas>
+          <p class="chart-note">Wealth inequality across all agents (0 = equal, 1 = maximum inequality).</p>
+        </div>
+        <div class="chart-card">
+          <h3>Avg Wealth — Housed vs Unhoused</h3>
+          <canvas id="chart-wealth"></canvas>
+          <p class="chart-note">Wealth gap between housed and unhoused populations each round.</p>
+        </div>
+        <div class="chart-card">
+          <h3>Avg Land Value</h3>
+          <canvas id="chart-value"></canvas>
+          <p class="chart-note">Mean weighted market value across all 100 parcels.</p>
+        </div>
+      </div>
+      <div class="mesa-card">
+        <h3>Why Python/Mesa adds value here</h3>
+        <ul>
+          <li>Jane's TSX prototype runs in-browser but has no persistent time-series. These charts track every metric across every round.</li>
+          <li>Seed input makes every run reproducible — critical for comparing scenarios scientifically.</li>
+          <li>CSV export downloads the full run as a spreadsheet for external analysis in R, Python, Excel.</li>
+          <li>Mesa's DataCollector is the standard library tool for this in academic ABM — peer reviewers expect it.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- GUIDE TAB -->
+    <div class="tab-content" id="tab-guide">
+      <div class="guide-content">
+        <div class="guide-section">
+          <h3>About this simulation</h3>
+          <p>
+            This is a Python/Mesa replica of a Georgist land value simulation originally prototyped by Jane [Doe] as a React/TSX Claude artifact.
+            The narrative: a non-technical researcher vibe-coded a working interactive prototype; this is what the Python handoff looks like.
+          </p>
+          <p>
+            A 10×10 grid of land parcels. Each round, new agents immigrate, leases expire, and land is re-auctioned.
+            Prices emerge from the interplay of fixed environment (column gradient) and dynamic community (who your neighbours are).
+          </p>
+        </div>
+
+        <div class="guide-section">
+          <h3>How land value works</h3>
+          <p>Every parcel has two components:</p>
+          <ul>
+            <li><strong>Environment score</strong> — fixed by column (1–10, left to right). Represents inherent site quality.</li>
+            <li><strong>Community score</strong> — dynamic. 8 immediate neighbours ×1pt + outer ring ×0.5pt = max 16.</li>
+          </ul>
+          <p style="margin-top:8px;"><strong>Market value = (env × env_weight) + (community × comm_weight)</strong></p>
+          <p>Adjust the weights in the sidebar to explore Distinct Neighbourhoods or Declining City scenarios.</p>
+        </div>
+
+        <div class="guide-section">
+          <h3>The auction (5 outcomes)</h3>
+          <table class="auction-table">
+            <thead>
+              <tr><th>Scenario</th><th>Winner</th><th>Price</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Vacant lot (no defender)</td><td>Wealthiest eligible</td><td>market_value</td></tr>
+              <tr><td>No challenger</td><td>Defender keeps</td><td>market_value (resets)</td></tr>
+              <tr><td>Challenger &gt; Defender</td><td>Challenger</td><td>max(market, defender + 1)</td></tr>
+              <tr><td>Equal wealth</td><td>Defender</td><td>challenger_wealth</td></tr>
+              <tr><td>Challenger &lt; Defender</td><td>Defender</td><td>max(market, challenger + 1)</td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:8px;">Parcels auction highest-value first. Agents bid highest-wealth first. Lease length is random within your min/max range.</p>
+        </div>
+
+        <div class="guide-section">
+          <h3>The 7-step pipeline (per round)</h3>
+          <ul>
+            <li>1. Update all community scores</li>
+            <li>2. Increment rounds_vacant for empty parcels</li>
+            <li>3. Identify expired leases → defenders</li>
+            <li>4. Collect all agents needing placement (expired + unhoused + immigrants), sort by wealth</li>
+            <li>5. Sort parcels by market value (highest first)</li>
+            <li>6. Run auctions</li>
+            <li>7. Final community score recalc + DataCollector snapshot</li>
+          </ul>
+        </div>
+
+        <div class="mesa-advantage-card">
+          <h3>What Python / Mesa adds over the TSX prototype</h3>
+          <p>Jane's React artifact is a working, interactive Georgist sim — genuinely impressive vibe-coded research. The Mesa version adds four things that matter for scientific use:</p>
+          <ul>
+            <li><strong>Time-series DataCollector.</strong> Every metric (Gini, housing rate, avg wealth by class, land value) tracked across every round. The TSX has no persistent history.</li>
+            <li><strong>Reproducible seeds.</strong> Set a seed, run 50 steps, share the number. Anyone else gets the exact same sequence. Critical for peer review.</li>
+            <li><strong>CSV export.</strong> One click downloads the full run as a spreadsheet. Analyze it in R, Stata, Excel — wherever your collaborators live.</li>
+            <li><strong>Mesa ecosystem.</strong> Connects to the standard Python ABM stack: NetworkX for network analysis, pandas for data wrangling, standard visualisation libraries. The sim can grow without rewriting everything.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENARIOS TAB -->
+    <div class="tab-content" id="tab-scenarios">
+      <div class="scenarios-tab" id="scenarios-grid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Ready — click Run or Step to begin</span>
+      <span style="margin-left:auto;">Built from Jane's TSX prototype · <a href="https://github.com/halcyonic-systems/georgist-network-economy" target="_blank" style="color:var(--accent);">GitHub</a></span>
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="right-panel">
+    <div class="panel-section">
+      <div class="panel-heading">Live Stats</div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">Population</div>
+          <div class="stat-val" id="stat-pop">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Housed</div>
+          <div class="stat-val" id="stat-housed">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Avg land val</div>
+          <div class="stat-val" id="stat-land-val">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Avg lease</div>
+          <div class="stat-val" id="stat-lease">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Housed wealth</div>
+          <div class="stat-val" id="stat-w-housed">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Unhoused wealth</div>
+          <div class="stat-val" id="stat-w-unhoused">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section" id="parcel-detail-section" style="display:none;">
+      <div class="panel-heading">Parcel Detail</div>
+      <div id="parcel-detail-content"></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-heading">Unhoused (<span id="unhoused-count-label">0</span>)</div>
+      <div class="unhoused-list" id="unhoused-list">
+        <div class="unhoused-empty">No unhoused agents yet</div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let state = null;
+let scenarios = {};
+let runInterval = null;
+let runSpeed = 400;
+let activeScenarioId = null;
+
+// Chart instances
+let chartHousing = null, chartGini = null, chartWealth = null, chartValue = null;
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  await loadScenarios();
+  const res = await fetch('/api/state');
+  state = await res.json();
+  renderAll();
+  initCharts();
+  setStatus('Ready — click Run or Step to begin', false);
+}
+
+async function loadScenarios() {
+  const res = await fetch('/api/scenarios');
+  const list = await res.json();
+  scenarios = {};
+  list.forEach(s => { scenarios[s.id] = s; });
+  renderScenarioChips();
+  renderScenariosTab();
+}
+
+// ============================================================
+// CONTROLS
+// ============================================================
+function toggleRun() {
+  if (runInterval) {
+    clearInterval(runInterval);
+    runInterval = null;
+    document.getElementById('btn-run').textContent = '▶ Run';
+    document.getElementById('status-dot').classList.remove('running');
+    setStatus(`Paused at round ${state?.round ?? 0}`, false);
+  } else {
+    document.getElementById('btn-run').textContent = '⏸ Pause';
+    document.getElementById('status-dot').classList.add('running');
+    runInterval = setInterval(stepOnce, runSpeed);
+    setStatus('Running…', true);
+  }
+}
+
+async function stepOnce() {
+  const res = await fetch('/api/step', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({steps:1})});
+  state = await res.json();
+  renderAll();
+  await updateCharts();
+  setStatus(`Round ${state.round}`, runInterval != null);
+}
+
+async function resetSim() {
+  if (runInterval) { clearInterval(runInterval); runInterval = null; document.getElementById('btn-run').textContent = '▶ Run'; }
+  const params = collectParams();
+  const res = await fetch('/api/reset', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(params)});
+  state = await res.json().then(r => r.state);
+  renderAll();
+  resetCharts();
+  activeScenarioId = null;
+  renderScenarioChips();
+  document.getElementById('status-dot').classList.remove('running');
+  setStatus('Reset — ready', false);
+}
+
+async function applyParams() {
+  if (runInterval) { clearInterval(runInterval); runInterval = null; document.getElementById('btn-run').textContent = '▶ Run'; }
+  const params = collectParams();
+  const res = await fetch('/api/init', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(params)});
+  const data = await res.json();
+  state = data.state;
+  renderAll();
+  resetCharts();
+  activeScenarioId = null;
+  renderScenarioChips();
+  setStatus('Parameters applied — ready', false);
+}
+
+async function applySeedAndReset() {
+  await applyParams();
+}
+
+function updateSpeed(val) {
+  runSpeed = parseInt(val);
+  document.getElementById('speed-label').textContent = val;
+  if (runInterval) {
+    clearInterval(runInterval);
+    runInterval = setInterval(stepOnce, runSpeed);
+  }
+}
+
+function collectParams() {
+  const params = {
+    immigration_rate: parseInt(document.getElementById('s-imm').value),
+    min_lease_length: parseInt(document.getElementById('s-min-lease').value),
+    max_lease_length: parseInt(document.getElementById('s-max-lease').value),
+    max_wealth: parseInt(document.getElementById('s-max-wealth').value),
+    environment_weight: parseFloat(document.getElementById('s-env-w').value),
+    community_weight: parseFloat(document.getElementById('s-comm-w').value),
+    vacancy_decay: document.getElementById('s-vacancy').checked,
+  };
+  const seedVal = document.getElementById('s-seed').value;
+  if (seedVal !== '') params.seed = parseInt(seedVal);
+  return params;
+}
+
+async function loadScenarioById(id) {
+  if (runInterval) { clearInterval(runInterval); runInterval = null; document.getElementById('btn-run').textContent = '▶ Run'; }
+  const res = await fetch('/api/scenario', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})});
+  const data = await res.json();
+  state = data.state;
+  activeScenarioId = id;
+  // Sync sliders
+  const p = scenarios[id].params;
+  syncSliders(p);
+  renderAll();
+  resetCharts();
+  renderScenarioChips();
+  setStatus(`Scenario: ${data.title}`, false);
+}
+
+function syncSliders(p) {
+  if (p.immigration_rate !== undefined) { setSlider('s-imm', 'lbl-imm', p.immigration_rate, v=>v); }
+  if (p.min_lease_length !== undefined) { setSlider('s-min-lease', 'lbl-min-lease', p.min_lease_length, v=>v); }
+  if (p.max_lease_length !== undefined) { setSlider('s-max-lease', 'lbl-max-lease', p.max_lease_length, v=>v); }
+  if (p.max_wealth !== undefined) { setSlider('s-max-wealth', 'lbl-max-wealth', p.max_wealth, v=>v); }
+  if (p.environment_weight !== undefined) { setSlider('s-env-w', 'lbl-env-w', p.environment_weight, v=>parseFloat(v).toFixed(1)); }
+  if (p.community_weight !== undefined) { setSlider('s-comm-w', 'lbl-comm-w', p.community_weight, v=>parseFloat(v).toFixed(1)); }
+  if (p.vacancy_decay !== undefined) { document.getElementById('s-vacancy').checked = p.vacancy_decay; }
+}
+
+function setSlider(sliderId, labelId, value, fmt) {
+  const el = document.getElementById(sliderId);
+  el.value = value;
+  document.getElementById(labelId).textContent = fmt(value);
+}
+
+function syncLabel(sliderId, labelId, fmt) {
+  document.getElementById(labelId).textContent = fmt(document.getElementById(sliderId).value);
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+async function exportCSV() {
+  const res = await fetch('/api/export/csv');
+  if (!res.ok) { const d = await res.json(); alert(d.error); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'georgist_timeseries.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderAll() {
+  if (!state) return;
+  renderKPIs();
+  renderGrid();
+  renderStats();
+  renderUnhoused();
+}
+
+function renderKPIs() {
+  const s = state;
+  document.getElementById('kpi-round').textContent = s.round;
+  document.getElementById('kpi-housing').textContent = (s.stats.housing_rate * 100).toFixed(0) + '%';
+  document.getElementById('kpi-gini').textContent = s.round > 0 ? s.stats.gini_coefficient.toFixed(3) : '—';
+  document.getElementById('kpi-unhoused').textContent = s.stats.unhoused_count;
+}
+
+function renderStats() {
+  const st = state.stats;
+  document.getElementById('stat-pop').textContent = st.population;
+  document.getElementById('stat-housed').textContent = st.housed;
+  document.getElementById('stat-land-val').textContent = st.avg_land_value.toFixed(1);
+  document.getElementById('stat-lease').textContent = st.avg_lease_price > 0 ? st.avg_lease_price.toFixed(1) : '—';
+  document.getElementById('stat-w-housed').textContent = st.avg_wealth_housed > 0 ? st.avg_wealth_housed.toFixed(1) : '—';
+  document.getElementById('stat-w-unhoused').textContent = st.avg_wealth_unhoused > 0 ? st.avg_wealth_unhoused.toFixed(1) : '—';
+}
+
+function renderGrid() {
+  const canvas = document.getElementById('grid-canvas');
+  const maxVal = state.max_value;
+
+  state.parcels.forEach((p, i) => {
+    let cell = document.getElementById(`parcel-${p.id}`);
+    if (!cell) {
+      cell = document.createElement('div');
+      cell.className = 'parcel';
+      cell.id = `parcel-${p.id}`;
+      cell.title = `Parcel ${p.id} (row ${p.row}, col ${p.col})`;
+      cell.addEventListener('click', () => selectParcel(p.id));
+      canvas.appendChild(cell);
+    }
+
+    // Background: heat map (display_value / max_value)
+    const ratio = Math.min(1, p.display_value / maxVal);
+    cell.style.backgroundColor = heatColor(ratio);
+
+    // Content: agent dot or vacant indicator
+    cell.innerHTML = '';
+
+    if (p.occupant) {
+      const dot = document.createElement('div');
+      dot.className = 'agent-dot';
+      const wealthRatio = p.occupant.wealth / state.params.max_wealth;
+      dot.style.backgroundColor = wealthColor(wealthRatio);
+      cell.appendChild(dot);
+    } else {
+      const dot = document.createElement('div');
+      dot.className = 'vacant-dot';
+      cell.appendChild(dot);
+    }
+
+    // Value label
+    const lbl = document.createElement('div');
+    lbl.className = 'parcel-value';
+    lbl.textContent = p.display_value.toFixed(0);
+    cell.appendChild(lbl);
+  });
+}
+
+function heatColor(t) {
+  // Interpolate: light blue → mid blue → dark navy
+  if (t < 0.5) {
+    const r = lerp(240, 59, t * 2);
+    const g = lerp(244, 130, t * 2);
+    const b = lerp(255, 246, t * 2);
+    return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+  } else {
+    const r = lerp(59, 30, (t - 0.5) * 2);
+    const g = lerp(130, 27, (t - 0.5) * 2);
+    const b = lerp(246, 75, (t - 0.5) * 2);
+    return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+  }
+}
+
+function wealthColor(t) {
+  // Low wealth = red-orange, high wealth = green
+  const h = lerp(0, 120, t);
+  const s = 65;
+  const l = lerp(60, 42, t);
+  return `hsl(${h},${s}%,${l}%)`;
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function renderUnhoused() {
+  const list = document.getElementById('unhoused-list');
+  const label = document.getElementById('unhoused-count-label');
+  label.textContent = state.stats.unhoused_count;
+
+  if (!state.unhoused.length) {
+    list.innerHTML = '<div class="unhoused-empty">No unhoused agents</div>';
+    return;
+  }
+
+  list.innerHTML = state.unhoused
+    .sort((a, b) => b.wealth - a.wealth)
+    .slice(0, 40)
+    .map(a => `
+      <div class="unhoused-item">
+        <span style="color:var(--text-muted);font-size:10px;">entered R${a.round_entered}</span>
+        <span class="u-wealth">$${a.wealth}</span>
+      </div>
+    `).join('');
+}
+
+function renderScenarioChips() {
+  const container = document.getElementById('scenario-chips');
+  container.innerHTML = Object.values(scenarios).map(s => `
+    <button class="scenario-chip ${activeScenarioId === s.id ? 'active' : ''}" onclick="loadScenarioById('${s.id}')">
+      <div class="scenario-chip-name">${s.title}</div>
+      <div class="scenario-chip-desc">${s.description.slice(0, 60)}…</div>
+    </button>
+  `).join('');
+}
+
+function renderScenariosTab() {
+  const container = document.getElementById('scenarios-grid');
+  container.innerHTML = Object.values(scenarios).map(s => `
+    <div class="scenario-card ${activeScenarioId === s.id ? 'active' : ''}" id="scard-${s.id}">
+      <div class="scenario-card-name">${s.title}</div>
+      <div class="scenario-card-desc">${s.description}</div>
+      <div class="scenario-params">
+        <span class="scenario-param-tag">imm: ${s.params.immigration_rate}</span>
+        <span class="scenario-param-tag">leases: ${s.params.min_lease_length}–${s.params.max_lease_length}</span>
+        <span class="scenario-param-tag">wealth ≤${s.params.max_wealth}</span>
+        <span class="scenario-param-tag">env×${s.params.environment_weight}</span>
+        <span class="scenario-param-tag">comm×${s.params.community_weight}</span>
+        ${s.params.vacancy_decay ? '<span class="scenario-param-tag">decay ✓</span>' : ''}
+      </div>
+      <button class="scenario-load-btn" onclick="loadScenarioById('${s.id}')">Load Scenario</button>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// PARCEL DETAIL
+// ============================================================
+let selectedParcelId = null;
+
+async function selectParcel(id) {
+  // Deselect if same
+  if (selectedParcelId === id) {
+    selectedParcelId = null;
+    document.querySelectorAll('.parcel.selected').forEach(el => el.classList.remove('selected'));
+    document.getElementById('parcel-detail-section').style.display = 'none';
+    return;
+  }
+  selectedParcelId = id;
+  document.querySelectorAll('.parcel.selected').forEach(el => el.classList.remove('selected'));
+  document.getElementById(`parcel-${id}`).classList.add('selected');
+
+  const res = await fetch(`/api/parcel/${id}`);
+  const p = await res.json();
+
+  const eventsHtml = p.history.slice(-8).reverse().map(e => `
+    <div class="parcel-event ev-${e.type}">
+      <strong>R${e.round}</strong> ${e.type.replace(/_/g,' ')}
+      ${e.details.lease_price ? `· $${e.details.lease_price.toFixed(1)}` : ''}
+    </div>
+  `).join('') || '<div style="font-size:11px;color:var(--text-dim);">No events yet</div>';
+
+  document.getElementById('parcel-detail-content').innerHTML = `
+    <div class="parcel-detail">
+      <div class="parcel-detail-row"><span>Location</span><span>Row ${p.row}, Col ${p.col}</span></div>
+      <div class="parcel-detail-row"><span>Env score</span><span>${p.environment_score}</span></div>
+      <div class="parcel-detail-row"><span>Community score</span><span>${p.community_score}</span></div>
+      <div class="parcel-detail-row"><span>Market value</span><span>${p.market_value.toFixed(2)}</span></div>
+      ${p.lease_price ? `<div class="parcel-detail-row"><span>Lease price</span><span>${p.lease_price.toFixed(2)}</span></div>` : ''}
+      ${p.occupant ? `
+        <div class="parcel-detail-row"><span>Occupant wealth</span><span>${p.occupant.wealth}</span></div>
+        <div class="parcel-detail-row"><span>Lease expires</span><span>R${p.occupant.lease_expires}</span></div>
+      ` : `<div class="parcel-detail-row"><span>Status</span><span style="color:var(--text-dim)">Vacant (${p.rounds_vacant}r)</span></div>`}
+      <div class="parcel-event-list">${eventsHtml}</div>
+    </div>
+  `;
+  document.getElementById('parcel-detail-section').style.display = 'flex';
+}
+
+// ============================================================
+// CHARTS (Mesa DataCollector advantage)
+// ============================================================
+function chartDefaults(label, color) {
+  return {
+    label,
+    data: [],
+    borderColor: color,
+    backgroundColor: color + '20',
+    fill: true,
+    tension: 0.3,
+    pointRadius: 0,
+    borderWidth: 2,
+  };
+}
+
+function initCharts() {
+  const opts = (yLabel) => ({
+    responsive: true,
+    animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: false },
+      y: { title: { display: true, text: yLabel, font: {size:10} }, ticks: {font:{size:10}} },
+    },
+  });
+
+  chartHousing = new Chart(document.getElementById('chart-housing'), {
+    type: 'line',
+    data: { labels: [], datasets: [chartDefaults('Housing Rate', '#059669')] },
+    options: { ...opts('%'), scales: { ...opts('%').scales, y: { ...opts('%').scales.y, min: 0, max: 1 } } },
+  });
+  chartGini = new Chart(document.getElementById('chart-gini'), {
+    type: 'line',
+    data: { labels: [], datasets: [chartDefaults('Gini', '#d97706')] },
+    options: { ...opts('Gini'), scales: { ...opts('Gini').scales, y: { ...opts('Gini').scales.y, min: 0, max: 1 } } },
+  });
+  chartWealth = new Chart(document.getElementById('chart-wealth'), {
+    type: 'line',
+    data: { labels: [], datasets: [
+      { ...chartDefaults('Housed', '#1a56db'), fill: false },
+      { ...chartDefaults('Unhoused', '#dc2626'), fill: false },
+    ]},
+    options: { ...opts('Avg Wealth'), plugins: { legend: { display: true, labels: { boxWidth: 12, font: {size:10} } } } },
+  });
+  chartValue = new Chart(document.getElementById('chart-value'), {
+    type: 'line',
+    data: { labels: [], datasets: [chartDefaults('Avg Land Value', '#7c3aed')] },
+    options: opts('Value'),
+  });
+}
+
+async function updateCharts() {
+  const res = await fetch('/api/history');
+  const h = await res.json();
+  const rounds = h.round || [];
+  if (!rounds.length) return;
+
+  const labels = rounds.map(r => `R${r}`);
+
+  chartHousing.data.labels = labels;
+  chartHousing.data.datasets[0].data = h.housing_rate || [];
+  chartHousing.update('none');
+
+  chartGini.data.labels = labels;
+  chartGini.data.datasets[0].data = h.gini_coefficient || [];
+  chartGini.update('none');
+
+  chartWealth.data.labels = labels;
+  chartWealth.data.datasets[0].data = h.avg_wealth_housed || [];
+  chartWealth.data.datasets[1].data = h.avg_wealth_unhoused || [];
+  chartWealth.update('none');
+
+  chartValue.data.labels = labels;
+  chartValue.data.datasets[0].data = h.avg_land_value || [];
+  chartValue.update('none');
+}
+
+function resetCharts() {
+  [chartHousing, chartGini, chartWealth, chartValue].forEach(c => {
+    if (!c) return;
+    c.data.labels = [];
+    c.data.datasets.forEach(d => d.data = []);
+    c.update('none');
+  });
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`tab-${id}`).classList.add('active');
+
+  // Update charts when switching to charts tab
+  if (id === 'charts') updateCharts();
+  if (id === 'scenarios') renderScenariosTab();
+}
+
+// ============================================================
+// STATUS
+// ============================================================
+function setStatus(msg, running) {
+  document.getElementById('status-text').textContent = msg;
+  if (running) {
+    document.getElementById('status-dot').classList.add('running');
+  } else {
+    document.getElementById('status-dot').classList.remove('running');
+  }
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+init();
+</script>
+</body>
+</html>
