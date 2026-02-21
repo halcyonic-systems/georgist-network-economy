@@ -5,7 +5,7 @@ Enter a scenario, hit Run. Watch the market find its equilibrium.
 A Python/Mesa replica of a Georgist land value simulation originally prototyped by Jane Doe as a React/TSX Claude artifact.
 **Built as a companion artifact for "On Scientific Freedom" (Halcyonic Systems, 2026).**
 
-🔗 **[Live Demo](https://georgist-network-economy.up.railway.app)** *(updating after Railway deploy)*
+🔗 **[Live Demo](https://georgist-network-economy-production.up.railway.app)**
 
 ---
 
