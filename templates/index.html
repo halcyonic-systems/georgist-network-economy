@@ -440,8 +440,33 @@ input[type=range] {
 .stat-label { font-size: 10px; color: var(--text-muted); }
 .stat-val { font-size: 14px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--text); }
 
+/* Prior runs */
+.runs-list { display: flex; flex-direction: column; gap: 5px; max-height: 240px; overflow-y: auto; }
+.run-item {
+  padding: 7px 8px;
+  background: var(--bg-section);
+  border-radius: 6px;
+  border-left: 3px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.run-item:hover { border-color: var(--accent); background: var(--accent-soft); }
+.run-item.active { border-color: var(--success); background: #f0fdf4; }
+.run-item-title { font-size: 11px; font-weight: 700; color: var(--text); }
+.run-item-meta { font-size: 10px; color: var(--text-muted); margin-top: 2px; display: flex; gap: 8px; }
+.run-item-meta span { font-family: 'SF Mono', monospace; }
+.runs-empty { font-size: 11px; color: var(--text-dim); text-align: center; padding: 12px 0; }
+.runs-tsx-note {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 4px 0 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
 /* Unhoused list */
-.unhoused-list { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; }
+.unhoused-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
 .unhoused-item {
   display: flex;
   justify-content: space-between;
@@ -928,6 +953,14 @@ input[type=range] {
     </div>
 
     <div class="panel-section">
+      <div class="panel-heading">Prior Runs (<span id="runs-count-label">0</span>)</div>
+      <div class="runs-list" id="runs-list">
+        <div class="runs-empty">No saved runs yet — reset after running to save</div>
+      </div>
+      <div class="runs-tsx-note">Jane's TSX stores nothing. Every reset here is saved automatically.</div>
+    </div>
+
+    <div class="panel-section">
       <div class="panel-heading">Unhoused (<span id="unhoused-count-label">0</span>)</div>
       <div class="unhoused-list" id="unhoused-list">
         <div class="unhoused-empty">No unhoused agents yet</div>
@@ -959,6 +992,7 @@ async function init() {
   state = await res.json();
   renderAll();
   initCharts();
+  await loadRuns();
   setStatus('Ready — click Run or Step to begin', false);
 }
 
@@ -1401,6 +1435,97 @@ function setStatus(msg, running) {
     document.getElementById('status-dot').classList.remove('running');
   }
 }
+
+// ============================================================
+// PRIOR RUNS
+// ============================================================
+let runs = [];
+let activeRunId = null;
+
+async function loadRuns() {
+  const res = await fetch('/api/runs');
+  runs = await res.json();
+  renderRuns();
+}
+
+function renderRuns() {
+  const list = document.getElementById('runs-list');
+  const label = document.getElementById('runs-count-label');
+  label.textContent = runs.length;
+
+  if (!runs.length) {
+    list.innerHTML = '<div class="runs-empty">No saved runs yet — reset after running to save</div>';
+    return;
+  }
+
+  list.innerHTML = runs.map(r => {
+    const ts = new Date(r.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const gini = r.final_gini != null ? r.final_gini.toFixed(3) : '—';
+    const housing = r.final_housing_rate != null ? (r.final_housing_rate * 100).toFixed(0) + '%' : '—';
+    return `
+      <div class="run-item ${activeRunId === r.id ? 'active' : ''}" onclick="loadRunIntoCharts('${r.id}')">
+        <div class="run-item-title">${r.scenario_title}</div>
+        <div class="run-item-meta">
+          <span>R${r.rounds}</span>
+          <span>Gini ${gini}</span>
+          <span>Housed ${housing}</span>
+          <span style="margin-left:auto;color:var(--text-dim)">${ts}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadRunIntoCharts(runId) {
+  const res = await fetch(`/api/runs/${runId}`);
+  const run = await res.json();
+  activeRunId = runId;
+  renderRuns();
+
+  // Push history into charts as a comparison overlay
+  const h = run.history;
+  const rounds = (h.round || []).map(r => `R${r}`);
+
+  // Switch to charts tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab')[1].classList.add('active');
+  document.getElementById('tab-charts').classList.add('active');
+
+  // Add comparison dataset to each chart (dashed line)
+  const addOrUpdateComparison = (chart, data, label) => {
+    // Remove existing comparison dataset if present
+    chart.data.datasets = chart.data.datasets.filter(d => !d._comparison);
+    chart.data.datasets.push({
+      label: `↩ ${run.scenario_title} (R${run.rounds})`,
+      data,
+      borderColor: '#9ca3af',
+      borderDash: [4, 3],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: false,
+      tension: 0.3,
+      _comparison: true,
+    });
+    chart.data.labels = rounds;
+    chart.options.plugins.legend.display = true;
+    chart.update('none');
+  };
+
+  addOrUpdateComparison(chartHousing, h.housing_rate || [], 'Housing rate');
+  addOrUpdateComparison(chartGini,    h.gini_coefficient || [], 'Gini');
+  addOrUpdateComparison(chartWealth,  h.avg_wealth_housed || [], 'Housed wealth');
+  addOrUpdateComparison(chartValue,   h.avg_land_value || [], 'Land value');
+
+  setStatus(`Comparing: ${run.scenario_title} (${run.rounds} rounds) — dashed line`, false);
+}
+
+// Reload runs after every reset
+const _origResetSim = resetSim;
+resetSim = async function() {
+  await _origResetSim();
+  await loadRuns();
+};
 
 // ============================================================
 // BOOT
