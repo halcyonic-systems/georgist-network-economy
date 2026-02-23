@@ -2,10 +2,10 @@
 
 Enter a scenario, hit Run. Watch the market find its equilibrium.
 
-A Python/Mesa replica of a Georgist land value simulation originally prototyped by Jane Doe as a React/TSX Claude artifact.
+A Python/Mesa replica of a Georgist land value simulation originally prototyped by Jane as a React/TSX Claude artifact.
 **Built as a companion artifact for "On Scientific Freedom" (Halcyonic Systems, 2026).**
 
-🔗 **[Live Demo](https://georgist-network-economy-production.up.railway.app)**
+🔗 **[Live Demo — Mesa/Python](https://georgist-network-economy-production.up.railway.app)** &nbsp;|&nbsp; 🔗 **[Original Interactive Demo — Jane's TSX](https://claude.ai/public/artifacts/5a54a03b-6cc1-439b-9cb6-7c05d6280513)** *(Claude artifact — standalone GH Pages deploy planned)*
 
 ---
 
@@ -22,9 +22,16 @@ Every round, parcels re-auction from highest to lowest value. The wealthiest eli
 
 ---
 
+## Original TSX source
+
+Jane's original simulation lives in `original/simulation.tsx` — a fully interactive React model built through conversation with an AI, no prior coding experience required. It's included here to document the lineage and let readers compare implementations.
+
+**Try it now**: [claude.ai/public/artifacts/5a54a03b-6cc1-439b-9cb6-7c05d6280513](https://claude.ai/public/artifacts/5a54a03b-6cc1-439b-9cb6-7c05d6280513) *(standalone GH Pages deploy planned — link will be updated)*
+
+---
+
 ## The TSX → Mesa handoff
 
-Jane prototyped this simulation as a React/TSX Claude artifact — a fully interactive model built through conversation with an AI, no prior coding experience required.
 This Mesa version demonstrates what a production-grade Python handoff looks like. Four things Python/Mesa adds that the TSX can't do:
 
 1. **DataCollector time-series** — every metric (Gini coefficient, housing rate, avg wealth by class, land value) tracked across every round. The TSX has no persistent history.
@@ -76,6 +83,6 @@ python3 -c "from src.model import GeorgistModel; m = GeorgistModel(); [m.step() 
 
 ## Attribution
 
-- Original TSX prototype: Jane Doe
-- Mesa replica: Shingai Thornton / Halcyonic Systems
-- "On Scientific Freedom" commentary: Shingai Thornton (Halcyonic Systems, 2026)
+- Original TSX prototype: Jane (`original/simulation.tsx`)
+- Mesa replica: Halcyonic Systems
+- "On Scientific Freedom" commentary: Halcyonic Systems (2026)
